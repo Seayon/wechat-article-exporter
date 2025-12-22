@@ -445,6 +445,16 @@ export class Exporter extends BaseDownload {
     $jsArticleContent.querySelector('#js_pc_qr_code')?.remove();
     $jsArticleContent.querySelector('#wx_stream_article_slide_tip')?.remove();
 
+    // 图片懒加载：将 data-src 回填到 src，便于导出
+    const imgs = $jsArticleContent.querySelectorAll<HTMLImageElement>('img');
+    imgs.forEach(img => {
+      const src = img.getAttribute('src');
+      const dataSrc = img.getAttribute('data-src');
+      if (!src && dataSrc) {
+        img.setAttribute('src', dataSrc);
+      }
+    });
+
     // 文本分享消息补充
     const $js_text_desc = $jsArticleContent.querySelector('#js_text_desc') as HTMLElement | null;
     if ($js_text_desc && !$js_text_desc.innerHTML.trim()) {
