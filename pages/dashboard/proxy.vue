@@ -6,10 +6,47 @@
 
     <div class="flex flex-col h-full divide-y divide-gray-200">
       <!-- header -->
-      <header class="flex justify-between items-center px-4 py-5 sm:px-6">
-        <h2 class="text-2xl font-semibold">运行状况 <small class="text-gray-500 mx-3">最近 60 天</small></h2>
+      <header class="px-4 py-5 sm:px-6">
+        <div class="flex justify-between items-center mb-3">
+          <h2 class="text-2xl font-semibold">统计信息</h2>
 
-        <p class="font-serif font-bold">可用: {{ totalSuccess }}，不可用: {{ totalFailure }}</p>
+          <p class="font-serif font-bold">可用: {{ totalSuccess }}，不可用: {{ totalFailure }}</p>
+        </div>
+        <div class="flex justify-between items-center">
+          <p class="text-rose-500 text-sm">
+            警告: 公共代理资源有限，请合理使用。 若需抓取大量数据，请搭建自己的私有代理节点。<br />
+            若发现某ip存在滥用公共代理从而导致官网无法使用，将有可能被封禁。<br />
+          </p>
+          <UPopover :popper="{ placement: 'left-start', arrow: true }">
+            <UButton
+              :icon="hasBlocked ? 'i-lucide:annoyed' : 'i-lucide:smile'"
+              variant="link"
+              :color="hasBlocked ? 'rose' : 'green'"
+            />
+
+            <template #panel>
+              <div class="p-4 space-y-3 max-h-80 overflow-y-scroll">
+                <div>
+                  <p>当前IP:</p>
+                  <code class="font-medium" :class="hasBlocked ? 'text-rose-500' : 'text-green-500'">
+                    {{ currentIP }}
+                  </code>
+                </div>
+                <div>
+                  <p class="flex justify-between items-center">
+                    <span>已被封禁IP:</span>
+                    <span class="text-xs text-gray-500">若存在误伤，请联系开发者</span>
+                  </p>
+                  <ul>
+                    <li v-for="ip in BLOCKED_IPS" :key="ip">
+                      <code class="text-rose-500">{{ ip }}</code>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </template>
+          </UPopover>
+        </div>
       </header>
 
       <!-- 数据展示区 -->
@@ -17,7 +54,7 @@
         <div v-if="loading" class="flex justify-center items-center mt-5">
           <Loader :size="28" class="animate-spin text-slate-500" />
         </div>
-        <ProxyStatus :data="monitorList" />
+        <ProxyMetrics :data="metricsData" />
       </div>
     </div>
   </div>
@@ -26,27 +63,44 @@
 <script setup lang="ts">
 import { Loader } from 'lucide-vue-next';
 import { websiteName } from '~/config';
-import type { ResultProxyStatus } from '~/types/proxy';
+import type { AccountMetric } from '~/types/proxy';
+import ProxyMetrics from '~/components/ProxyMetrics.vue';
+import { request } from '#shared/utils/request';
+import { BLOCKED_IPS } from '~/config/public-proxy';
 
 useHead({
   title: `公共代理 | ${websiteName}`,
 });
 
 const loading = ref(false);
-const monitorList = ref<ResultProxyStatus[]>([]);
+const metricsData = ref<AccountMetric[]>([]);
 
-const totalSuccess = computed(() => monitorList.value.filter(item => item.currentStatus === 'up').length);
-const totalFailure = computed(() => monitorList.value.filter(item => item.currentStatus === 'down').length);
+const totalSuccess = computed(
+  () => metricsData.value.filter(item => item.metric && item.metric.dailyRequests < 100_000).length
+);
+const totalFailure = computed(
+  () => metricsData.value.filter(item => item.metric && item.metric.dailyRequests >= 100_000).length
+);
 
-async function getMonitorList() {
+async function getMetricsData() {
   loading.value = true;
   try {
-    monitorList.value = await fetch('/api/web/misc/status').then(res => res.json());
+    metricsData.value = await fetch('/api/web/misc/status').then(res => res.json());
   } catch (error) {
     console.error(error);
   } finally {
     loading.value = false;
   }
 }
-getMonitorList();
+
+const currentIP = ref('');
+onMounted(async () => {
+  await getMetricsData();
+
+  const data = await request('/api/web/misc/ip');
+  currentIP.value = data.ip;
+});
+const hasBlocked = computed(() => {
+  return BLOCKED_IPS.includes(currentIP.value);
+});
 </script>
